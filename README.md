@@ -57,16 +57,6 @@ normalize_city("上海市")           # => "上海"
 normalize_city("  深圳市  ")       # => "深圳"
 ```
 
-### Category Guessing / 类别猜测
-
-```python
-from chinese_scraper_utils import guess_category
-
-guess_category("五一漫展嘉年华")   # => "漫展"
-guess_category("初音未来演唱会")   # => "演唱会"
-guess_category("清明上河图展览")   # => "展览"
-```
-
 ### Random User-Agent / 随机 UA
 
 ```python
@@ -115,8 +105,6 @@ result = client.chat_json([
 | `CITIES`                 | `list[str]`         | 52 major Chinese cities / 52 个主要中国城市                    |
 | `extract_city(text)`     | `str` → `str`       | Chinese city name extraction / 城市名提取                      |
 | `normalize_city(city)`   | `str` → `str`       | City name normalization (strip suffix) / 城市名规范化          |
-| `CATEGORY_ALIASES`       | `dict[str, str]`    | Category alias mapping / 类别别名映射                          |
-| `guess_category(title)`  | `str` → `str`       | Category guessing from title / 根据标题猜测类别                |
 | `UA_POOL`                | `list[str]`         | User-Agent pool / User-Agent 池                                |
 | `random_ua()`            | ` → `str`           | Random UA selection / 随机返回 UA                              |
 | `RateLimiter`            | class               | Async rate limiter with retry / 异步速率限制器                  |
