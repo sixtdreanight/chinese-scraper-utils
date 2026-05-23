@@ -33,12 +33,15 @@ class HotTopic:
 # 微博热搜
 # ═══════════════════════════════════════════════════════════════
 
-_WEIBO_HEADERS = {
-    "User-Agent": random_ua(),
+_WEIBO_STATIC_HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://weibo.com/",
     "X-Requested-With": "XMLHttpRequest",
 }
+
+
+def _weibo_headers():
+    return {**_WEIBO_STATIC_HEADERS, "User-Agent": random_ua()}
 
 
 def _weibo_item_to_topic(item: dict) -> HotTopic | None:
@@ -70,7 +73,7 @@ def scrape_weibo_hot() -> list[HotTopic]:
             # 再请求热搜 API
             resp = client.get(
                 "https://weibo.com/ajax/side/hotSearch",
-                headers=_WEIBO_HEADERS,
+                headers=_weibo_headers(),
                 timeout=15,
             )
             if resp.status_code != 200:
@@ -96,12 +99,15 @@ def scrape_weibo_hot() -> list[HotTopic]:
 # 知乎热榜
 # ═══════════════════════════════════════════════════════════════
 
-_ZHIHU_HEADERS = {
-    "User-Agent": random_ua(),
+_ZHIHU_STATIC_HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://www.zhihu.com/hot",
     "Origin": "https://www.zhihu.com",
 }
+
+
+def _zhihu_headers():
+    return {**_ZHIHU_STATIC_HEADERS, "User-Agent": random_ua()}
 
 
 def scrape_zhihu_hot() -> list[HotTopic]:
@@ -116,7 +122,7 @@ def scrape_zhihu_hot() -> list[HotTopic]:
             resp = client.get(
                 "https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total"
                 "?limit=50&desktop=true",
-                headers=_ZHIHU_HEADERS,
+                headers=_zhihu_headers(),
                 timeout=15,
             )
             if resp.status_code != 200:
@@ -171,37 +177,38 @@ def scrape_hackernews_top() -> list[HotTopic]:
                 return []
             ids = resp.json()[:30]
 
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            def fetch_one(hid: int) -> HotTopic | None:
-                try:
-                    item = client.get(
+        def fetch_one(hid: int) -> HotTopic | None:
+            try:
+                # Each thread creates its own httpx.Client (httpx.Client is not thread-safe)
+                with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(10.0)) as c:
+                    item = c.get(
                         f"https://hacker-news.firebaseio.com/v0/item/{hid}.json",
-                        timeout=10,
                     ).json()
-                    title = (item.get("title") or "").strip()
-                    if not title:
-                        return None
-                    url = item.get("url") or f"https://news.ycombinator.com/item?id={hid}"
-                    score = item.get("score", 0)
-                    return HotTopic(
-                        title=title,
-                        summary=f"HN热度 {score} · {item.get('descendants', 0)} 条评论",
-                        url=url,
-                        source="Hacker News",
-                        raw_score=score,
-                    )
-                except Exception:
+                title = (item.get("title") or "").strip()
+                if not title:
                     return None
+                url = item.get("url") or f"https://news.ycombinator.com/item?id={hid}"
+                score = item.get("score", 0)
+                return HotTopic(
+                    title=title,
+                    summary=f"HN热度 {score} · {item.get('descendants', 0)} 条评论",
+                    url=url,
+                    source="Hacker News",
+                    raw_score=score,
+                )
+            except Exception:
+                return None
 
-            with ThreadPoolExecutor(max_workers=5) as pool:
-                futures = {pool.submit(fetch_one, hid): hid for hid in ids}
-                for future in as_completed(futures):
-                    item = future.result()
-                    if item:
-                        results.append(item)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(fetch_one, hid): hid for hid in ids}
+            for future in as_completed(futures):
+                item = future.result()
+                if item:
+                    results.append(item)
 
-            logger.info("[hn] scraped %d topics", len(results))
+        logger.info("[hn] scraped %d topics", len(results))
     except Exception as e:
         logger.warning("[hn] error: %s", e)
     return results

@@ -74,13 +74,14 @@ def _cmd_extract(args):
 
     input_path = args.input
     try:
-        texts = json.loads(input_path.read_text(encoding="utf-8"))
+        texts = json.loads(input_path.read())
     except FileNotFoundError:
         print(f"错误: 文件不存在 — {args.input}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError:
         # 尝试按纯文本读取（每行一条）
-        texts = input_path.read_text(encoding="utf-8").strip().split("\n")
+        input_path.seek(0)
+        texts = input_path.read().strip().split("\n")
         texts = [t for t in texts if t.strip()]
 
     if not texts:

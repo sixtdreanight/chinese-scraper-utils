@@ -16,8 +16,7 @@ def parse_date(s: str) -> str:
     """解析结构化日期字符串，返回 YYYY-MM-DD 格式。
 
     支持: 2026-05-04, 2026/05/04, 2026.05.04, 2026-05-04 14:30:00, 20260504, ISO 格式。
-    无法解析时返回空字符串（不再静默返回截断垃圾）。
-    如需 None 返回值，请使用 try_parse_date()。
+    无法解析时返回空字符串。
     """
     if not s:
         return ""
@@ -44,9 +43,11 @@ def extract_date(text: str) -> str:
     """从中文自由文本中提取日期，返回 YYYY-MM-DD 格式。
 
     支持: '2026年5月4日', '5月4日', '5月4日-6日'。
+    当只有月日时，若已过当年则推断为次年（跨年处理）。
     无法提取时返回空字符串。
     """
-    year = datetime.now().year
+    now = datetime.now()
+    year = now.year
     for pat in _DATE_PATTERNS:
         m = pat.search(text)
         if m:
@@ -61,6 +62,15 @@ def extract_date(text: str) -> str:
                 y = year
             try:
                 dt = datetime(y, mth, day)
+                # 跨年推断: 月日已过超过 3 个月 → 推断为次年
+                if (
+                    (len(groups) <= 2 or (len(groups) == 3 and len(str(groups[0])) < 4))
+                    and (now - dt).days > 90
+                ):
+                    try:
+                        dt = datetime(y + 1, mth, day)
+                    except ValueError:
+                        pass
                 return dt.strftime("%Y-%m-%d")
             except ValueError:
                 continue

@@ -4,6 +4,10 @@ import time
 import asyncio
 import random
 
+import httpx
+
+from chinese_scraper_utils.errors import RateLimitError, NetworkError
+
 
 class RateLimiter:
     """异步速率限制器，保证两次请求之间至少间隔 min_interval 秒。"""
@@ -42,7 +46,13 @@ class RateLimiter:
                 if attempt < max_retries - 1:
                     wait_s = (2 ** attempt) * (0.5 + random.random())
                     await asyncio.sleep(wait_s)
-        raise last_exc or RuntimeError("max retries exceeded")
+        if last_exc:
+            if isinstance(last_exc, httpx.HTTPStatusError):
+                if last_exc.response.status_code in (429, 503):
+                    raise RateLimitError(str(last_exc), retry_after=None) from last_exc
+                raise NetworkError(str(last_exc), url=str(last_exc.request.url) if last_exc.request else "") from last_exc
+            raise last_exc  # re-raise original exception for non-httpx errors
+        raise RuntimeError("max retries exceeded")
 
     def limit(self, func):
         """装饰器：为异步函数添加速率限制。

@@ -16,14 +16,14 @@ from openai import APIStatusError, APITimeoutError, APIConnectionError, OpenAI
 
 logger = logging.getLogger(__name__)
 
-_RETRYABLE_STATUSES = frozenset({429, 503})
+_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 def _parse_json_content(raw: str) -> dict | list:
     """解析 LLM 返回的 JSON 内容，处理 markdown 代码块包裹。"""
     content = raw.strip()
     if content.startswith("```"):
-        content = re.sub(r"^```(?:json)?\s*\n", "", content)
+        content = re.sub(r"^```(?:json)?\s*\n", "", content, flags=re.MULTILINE)
         content = re.sub(r"\n```\s*$", "", content)
     return json.loads(content)
 
@@ -138,24 +138,30 @@ class DeepSeekClient:
                 try:
                     return _parse_json_content(raw)
                 except json.JSONDecodeError:
+                    if attempt == self.max_retries - 1:
+                        # Last attempt: fallback without JSON mode
+                        logger.debug(
+                            "JSON parse failed at last attempt, retrying without JSON mode"
+                        )
+                        fallback = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=msgs,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                        )
+                        raw = (fallback.choices[0].message.content or "").strip()
+                        try:
+                            return _parse_json_content(raw)
+                        except json.JSONDecodeError as e:
+                            raise ValueError(
+                                f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
+                            ) from e
+                    # Not last attempt: let retry loop handle it
                     logger.debug(
-                        "JSON parse failed (attempt %d), retrying without JSON mode",
+                        "JSON parse failed (attempt %d), will retry with JSON mode",
                         attempt + 1,
                     )
-                    # 回退：不加 JSON mode 重试
-                    fallback = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=msgs,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                    raw = (fallback.choices[0].message.content or "").strip()
-                    try:
-                        return _parse_json_content(raw)
-                    except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
-                        ) from e
+                    continue
 
             except (APITimeoutError, APIConnectionError) as e:
                 last_exc = e
@@ -238,23 +244,28 @@ class DeepSeekClient:
                 try:
                     return _parse_json_content(raw)
                 except json.JSONDecodeError:
+                    if attempt == self.max_retries - 1:
+                        logger.debug(
+                            "Async JSON parse failed at last attempt, retrying without JSON mode"
+                        )
+                        fallback = await self.async_client.chat.completions.create(
+                            model=self.model,
+                            messages=msgs,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                        )
+                        raw = (fallback.choices[0].message.content or "").strip()
+                        try:
+                            return _parse_json_content(raw)
+                        except json.JSONDecodeError as e:
+                            raise ValueError(
+                                f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
+                            ) from e
                     logger.debug(
-                        "Async JSON parse failed (attempt %d), retrying without JSON mode",
+                        "Async JSON parse failed (attempt %d), will retry with JSON mode",
                         attempt + 1,
                     )
-                    fallback = await self.async_client.chat.completions.create(
-                        model=self.model,
-                        messages=msgs,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                    raw = (fallback.choices[0].message.content or "").strip()
-                    try:
-                        return _parse_json_content(raw)
-                    except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
-                        ) from e
+                    continue
 
             except (APITimeoutError, APIConnectionError) as e:
                 last_exc = e
