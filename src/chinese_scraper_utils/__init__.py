@@ -7,7 +7,7 @@
 from chinese_scraper_utils._hash import stable_id
 from chinese_scraper_utils._date import parse_date, extract_date
 from chinese_scraper_utils._city import CITIES, extract_city, normalize_city
-from chinese_scraper_utils._category import CATEGORY_ALIASES, guess_category
+
 from chinese_scraper_utils._ua import UA_POOL, random_ua
 from chinese_scraper_utils._rate_limit import RateLimiter
 from chinese_scraper_utils._ai import DeepSeekClient
@@ -19,8 +19,6 @@ __all__ = [
     "CITIES",
     "extract_city",
     "normalize_city",
-    "CATEGORY_ALIASES",
-    "guess_category",
     "UA_POOL",
     "random_ua",
     "RateLimiter",

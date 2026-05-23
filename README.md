@@ -124,6 +124,11 @@ result = client.chat_json([
 
 ---
 
+## Related / 相关项目
+
+- [ComiRadar](https://github.com/sixtdreanight/ComiRadar) — Anime event scraper using this library
+- [weekly-hotspot](https://github.com/sixtdreanight/weekly-hotspot) — Weekly hot topics analysis using this library
+
 ## License / 许可证
 
 [MIT](LICENSE)
