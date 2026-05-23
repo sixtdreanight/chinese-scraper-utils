@@ -31,7 +31,7 @@
 - All modules now use `logging` instead of `print()`
 - `RateLimiter` retry backoff now includes jitter
 - `DeepSeekClient` has built-in retry on network errors and 429/503
-## v0.2.1 (2026-05-24)
+## v0.2.2 (2026-05-24)
 
 ### Security Fixes
 - **CLI extract**: Fixed `AttributeError` crash — `.read_text()` on file object replaced with `.read()` ([`__main__.py`](src/chinese_scraper_utils/__main__.py))
