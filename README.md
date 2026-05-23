@@ -1,7 +1,7 @@
-# cn-scraper-utils
+# chinese-scraper-utils
 
 <p align="center">
-  <img src="https://img.shields.io/pypi/v/cn-scraper-utils" alt="PyPI version">
+  <img src="https://img.shields.io/pypi/v/chinese-scraper-utils" alt="PyPI version">
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
@@ -15,7 +15,7 @@ Shared Python utilities for Chinese-language web scraping — date parsing, city
 ## Installation / 安装
 
 ```bash
-pip install cn-scraper-utils
+pip install chinese-scraper-utils
 ```
 
 ---
@@ -25,7 +25,7 @@ pip install cn-scraper-utils
 ### Stable ID / 稳定 ID
 
 ```python
-from cn_scraper_utils import stable_id
+from chinese_scraper_utils import stable_id
 
 uid = stable_id("北京国际动漫展", "北京", "2026-05-04")
 # => "3a8f1c9e2d4b6a05"  (SHA256 hex prefix, deterministic across restarts)
@@ -34,7 +34,7 @@ uid = stable_id("北京国际动漫展", "北京", "2026-05-04")
 ### Date Parsing / 日期解析
 
 ```python
-from cn_scraper_utils import parse_date, extract_date
+from chinese_scraper_utils import parse_date, extract_date
 
 # Structured date parsing / 结构化日期解析
 parse_date("2026-05-04")           # => "2026-05-04"
@@ -48,7 +48,7 @@ extract_date("2026年5月4日-6日")      # => "2026-05-04"
 ### City Extraction & Normalization / 城市提取与规范化
 
 ```python
-from cn_scraper_utils import extract_city, normalize_city, CITIES
+from chinese_scraper_utils import extract_city, normalize_city, CITIES
 
 extract_city("活动在上海举办")      # => "上海"
 extract_city("广州天河区")         # => "广州"
@@ -60,7 +60,7 @@ normalize_city("  深圳市  ")       # => "深圳"
 ### Category Guessing / 类别猜测
 
 ```python
-from cn_scraper_utils import guess_category
+from chinese_scraper_utils import guess_category
 
 guess_category("五一漫展嘉年华")   # => "漫展"
 guess_category("初音未来演唱会")   # => "演唱会"
@@ -70,7 +70,7 @@ guess_category("清明上河图展览")   # => "展览"
 ### Random User-Agent / 随机 UA
 
 ```python
-from cn_scraper_utils import random_ua, UA_POOL
+from chinese_scraper_utils import random_ua, UA_POOL
 
 random_ua()  # => "Mozilla/5.0 (Windows NT 10.0; ..."
 ```
@@ -79,7 +79,7 @@ random_ua()  # => "Mozilla/5.0 (Windows NT 10.0; ..."
 
 ```python
 import asyncio
-from cn_scraper_utils import RateLimiter
+from chinese_scraper_utils import RateLimiter
 
 limiter = RateLimiter(min_interval=1.0)
 
@@ -94,7 +94,7 @@ async def fetch():
 ### DeepSeek AI Client / DeepSeek AI 客户端
 
 ```python
-from cn_scraper_utils import DeepSeekClient
+from chinese_scraper_utils import DeepSeekClient
 
 client = DeepSeekClient(api_key="sk-xxx")
 result = client.chat_json([
