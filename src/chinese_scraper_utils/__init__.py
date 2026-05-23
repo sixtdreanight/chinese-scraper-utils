@@ -5,16 +5,36 @@
 """
 
 from chinese_scraper_utils._hash import stable_id
-from chinese_scraper_utils._date import parse_date, extract_date
+from chinese_scraper_utils._date import parse_date, try_parse_date, extract_date
 from chinese_scraper_utils._city import CITIES, extract_city, normalize_city
 from chinese_scraper_utils._category import CATEGORY_ALIASES, guess_category
 from chinese_scraper_utils._ua import UA_POOL, random_ua
 from chinese_scraper_utils._rate_limit import RateLimiter
 from chinese_scraper_utils._ai import DeepSeekClient
+from chinese_scraper_utils.errors import (
+    ScraperError,
+    RateLimitError,
+    ExtractionError,
+    ValidationError,
+    NetworkError,
+)
+from chinese_scraper_utils._search import SearchResult, search_web
+from chinese_scraper_utils._hotspots import (
+    HotTopic,
+    scrape_weibo_hot,
+    scrape_zhihu_hot,
+    scrape_hackernews_top,
+)
+from chinese_scraper_utils._extractor import (
+    ExtractedEvent,
+    EventExtractor,
+    extract_events,
+)
 
 __all__ = [
     "stable_id",
     "parse_date",
+    "try_parse_date",
     "extract_date",
     "CITIES",
     "extract_city",
@@ -25,4 +45,18 @@ __all__ = [
     "random_ua",
     "RateLimiter",
     "DeepSeekClient",
+    "ScraperError",
+    "RateLimitError",
+    "ExtractionError",
+    "ValidationError",
+    "NetworkError",
+    "SearchResult",
+    "search_web",
+    "HotTopic",
+    "scrape_weibo_hot",
+    "scrape_zhihu_hot",
+    "scrape_hackernews_top",
+    "ExtractedEvent",
+    "EventExtractor",
+    "extract_events",
 ]

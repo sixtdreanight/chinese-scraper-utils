@@ -16,21 +16,28 @@ def parse_date(s: str) -> str:
     """解析结构化日期字符串，返回 YYYY-MM-DD 格式。
 
     支持: 2026-05-04, 2026/05/04, 2026.05.04, 2026-05-04 14:30:00, 20260504, ISO 格式。
-    缺失时返回今天。
+    无法解析时返回空字符串（不再静默返回截断垃圾）。
+    如需 None 返回值，请使用 try_parse_date()。
     """
     if not s:
-        return datetime.now().strftime("%Y-%m-%d")
+        return ""
     s = str(s).strip()
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y-%m-%d %H:%M:%S", "%Y%m%d"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"):
         try:
-            return datetime.strptime(s[:len(fmt)], fmt).strftime("%Y-%m-%d")
-        except (ValueError, IndexError):
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
             continue
     try:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         pass
-    return s[:10] if len(s) >= 10 else s
+    return ""
+
+
+def try_parse_date(s: str) -> str | None:
+    """同 parse_date()，但无法解析时返回 None 而非空字符串。"""
+    result = parse_date(s)
+    return result if result else None
 
 
 def extract_date(text: str) -> str:

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chinese-scraper-utils"
-version = "0.1.0"
-description = "Chinese scraping utilities — date parsing, city extraction, SHA256 ID, UA pool, rate limiter, DeepSeek client"
+version = "0.2.1"
+description = "Chinese scraping utilities — date parsing, city extraction, SHA256 ID, UA pool, rate limiter, DeepSeek client, web search, hot topic scrapers, LLM extraction pipeline"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -14,6 +14,10 @@ dependencies = [
     "httpx>=0.24",
     "openai>=1.0",
 ]
+
+[project.optional-dependencies]
+search = ["ddgs>=1.0"]
+async = ["httpx>=0.25"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

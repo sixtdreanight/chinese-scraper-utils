@@ -16,9 +16,13 @@ CATEGORY_ALIASES = {
 
 
 def guess_category(title: str) -> str:
-    """根据标题猜测活动类别。"""
+    """根据标题猜测活动类别。使用最长匹配优先，避免短关键词覆盖长关键词。"""
     t = title.lower().replace(" ", "")
+    # 按 alias 长度降序排列：长关键词优先匹配（"二次元" 优于 "元"）
+    best_match = ""
+    best_cat = "其他"
     for alias, cat in CATEGORY_ALIASES.items():
-        if alias.lower() in t:
-            return cat
-    return "其他"
+        if alias.lower() in t and len(alias) > len(best_match):
+            best_match = alias
+            best_cat = cat
+    return best_cat
