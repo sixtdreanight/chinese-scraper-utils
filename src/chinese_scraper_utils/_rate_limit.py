@@ -8,6 +8,9 @@ import httpx
 
 from chinese_scraper_utils.errors import RateLimitError, NetworkError
 
+# 可重试的 HTTP 状态码（与 _ai.py 中的 DeepSeekClient 保持一致）
+_RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
+
 
 class RateLimiter:
     """异步速率限制器，保证两次请求之间至少间隔 min_interval 秒。"""
@@ -36,7 +39,7 @@ class RateLimiter:
             try:
                 await self.wait()
                 resp = await fetch_fn()
-                if hasattr(resp, "status_code") and resp.status_code in (429, 503):
+                if hasattr(resp, "status_code") and resp.status_code in _RETRYABLE_STATUSES:
                     wait_s = (2 ** attempt) * (0.5 + random.random())
                     await asyncio.sleep(wait_s)
                     continue
@@ -48,10 +51,13 @@ class RateLimiter:
                     await asyncio.sleep(wait_s)
         if last_exc:
             if isinstance(last_exc, httpx.HTTPStatusError):
-                if last_exc.response.status_code in (429, 503):
+                if last_exc.response.status_code in _RETRYABLE_STATUSES:
                     raise RateLimitError(str(last_exc), retry_after=None) from last_exc
                 raise NetworkError(str(last_exc), url=str(last_exc.request.url) if last_exc.request else "") from last_exc
-            raise last_exc  # re-raise original exception for non-httpx errors
+            # Wrap all other httpx errors (ConnectError, TimeoutException, etc.) as NetworkError
+            if isinstance(last_exc, httpx.HTTPError):
+                raise NetworkError(str(last_exc), url="") from last_exc
+            raise last_exc
         raise RuntimeError("max retries exceeded")
 
     def limit(self, func):
