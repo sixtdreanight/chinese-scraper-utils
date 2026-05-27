@@ -9,16 +9,6 @@ description = "Chinese scraping utilities — date parsing, city extraction, SHA
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.11"
-dependencies = [
-    "httpx>=0.24",
-    "openai>=1.0",
-]
-
-[project.optional-dependencies]
-search = ["ddgs>=1.0"]
-async = ["httpx>=0.25"]
-
 authors = [
     { name = "DreamNight", email = "support@dreamnight.net.cn" }
 ]
@@ -34,6 +24,15 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.24",
+    "openai>=1.0",
+]
+
+[project.optional-dependencies]
+search = ["ddgs>=1.0"]
+async = ["httpx>=0.25"]
 
 [project.urls]
 Homepage = "https://github.com/sixtdreanight/chinese-scraper-utils"
