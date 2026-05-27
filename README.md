@@ -1,3 +1,5 @@
+**Language:** [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md)
+
 # chinese-scraper-utils
 
 <p align="center">
@@ -12,7 +14,7 @@ Extracted from [ComiRadar](https://github.com/sixtdreanight/ComiRadar) and [week
 
 ---
 
-## Installation / 安装
+## Installation
 
 ```bash
 # Core (zero extra dependencies beyond httpx + openai)
@@ -24,7 +26,7 @@ pip install chinese-scraper-utils[search]
 
 ---
 
-## Quick Start / 快速开始
+## Quick Start
 
 ```python
 from chinese_scraper_utils import (
@@ -67,10 +69,10 @@ events = extractor.extract(["五一北京漫展嘉年华在国家会议中心...
 
 ---
 
-## API Reference / API 参考
+## API Reference
 
-| Export / 导出项 | Type | Description |
-|-----------------|------|-------------|
+| Export | Type | Description |
+|--------|------|-------------|
 | `parse_date(s)` | `str → str` | Structured date parsing |
 | `try_parse_date(s)` | `str → str\|None` | Same, returns None on failure |
 | `extract_date(text)` | `str → str` | Chinese text date extraction |
@@ -99,7 +101,7 @@ Full API docs: [API_REFERENCE.md](API_REFERENCE.md)
 
 ---
 
-## CLI / 命令行
+## CLI
 
 ```bash
 python -m chinese_scraper_utils search "五一北京漫展" -n 10
@@ -111,11 +113,21 @@ python -m chinese_scraper_utils extract posts.json -t "漫展,演唱会" -c 0.5 
 
 ---
 
-## Related / 相关项目
+## Related
 
 - [ComiRadar](https://github.com/sixtdreanight/ComiRadar) — Anime event scraper using this library
 - [weekly-hotspot](https://github.com/sixtdreanight/weekly-hotspot) — Weekly hot topics analysis
 
-## License / 许可证
+## License
 
 [MIT](LICENSE)
+
+---
+
+<div align="center">
+
+**Language / 语言**
+
+[**English**](README.md) | [**简体中文**](README.zh-CN.md)
+
+</div>

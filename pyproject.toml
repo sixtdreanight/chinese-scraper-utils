@@ -19,5 +19,26 @@ dependencies = [
 search = ["ddgs>=1.0"]
 async = ["httpx>=0.25"]
 
+authors = [
+    { name = "DreamNight", email = "support@dreamnight.net.cn" }
+]
+keywords = ["scraping", "chinese", "web-scraping", "date-parsing", "llm", "deepseek", "nlp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/sixtdreanight/chinese-scraper-utils"
+Repository = "https://github.com/sixtdreanight/chinese-scraper-utils.git"
+Issues = "https://github.com/sixtdreanight/chinese-scraper-utils/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
