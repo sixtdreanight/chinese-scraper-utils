@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chinese-scraper-utils"
-version = "0.2.6"
+version = "0.2.7"
 description = "Chinese scraping utilities — date parsing, city extraction, SHA256 ID, UA pool, rate limiter, DeepSeek client, web search, hot topic scrapers, LLM extraction pipeline"
 readme = "README.md"
 license = "MIT"
