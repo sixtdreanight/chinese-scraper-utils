@@ -67,7 +67,7 @@ def scrape_weibo_hot() -> list[HotTopic]:
     """
     results: list[HotTopic] = []
     try:
-        with httpx.Client(follow_redirects=True) as client:
+        with httpx.Client(verify=True, follow_redirects=True) as client:
             # 先访问首页获取 cookie
             client.get("https://weibo.com/", timeout=15)
             # 再请求热搜 API
@@ -118,7 +118,7 @@ def scrape_zhihu_hot() -> list[HotTopic]:
     """
     results: list[HotTopic] = []
     try:
-        with httpx.Client(follow_redirects=True) as client:
+        with httpx.Client(verify=True, follow_redirects=True) as client:
             resp = client.get(
                 "https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total"
                 "?limit=50&desktop=true",
@@ -167,7 +167,7 @@ def scrape_hackernews_top() -> list[HotTopic]:
     """
     results: list[HotTopic] = []
     try:
-        with httpx.Client(follow_redirects=True) as client:
+        with httpx.Client(verify=True, follow_redirects=True) as client:
             resp = client.get(
                 "https://hacker-news.firebaseio.com/v0/topstories.json",
                 timeout=15,
@@ -182,7 +182,7 @@ def scrape_hackernews_top() -> list[HotTopic]:
         def fetch_one(hid: int) -> HotTopic | None:
             try:
                 # Each thread creates its own httpx.Client (httpx.Client is not thread-safe)
-                with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(10.0)) as c:
+                with httpx.Client(verify=True, follow_redirects=True, timeout=httpx.Timeout(10.0)) as c:
                     item = c.get(
                         f"https://hacker-news.firebaseio.com/v0/item/{hid}.json",
                     ).json()

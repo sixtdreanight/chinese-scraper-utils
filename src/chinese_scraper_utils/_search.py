@@ -5,6 +5,7 @@
 
 import dataclasses
 import logging
+import threading
 import time
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 # 搜索限速：两次搜索之间至少间隔 3 秒
 _search_last_time = 0.0
 _SEARCH_MIN_INTERVAL = 3.0
+_search_lock = threading.Lock()
 
 
 @dataclasses.dataclass
@@ -35,13 +37,14 @@ def search_web(query: str, max_results: int = 10) -> list[SearchResult]:
     if not query.strip():
         return []
 
-    # 速率限制
+    # 速率限制（线程安全）
     global _search_last_time
-    now = time.monotonic()
-    elapsed = now - _search_last_time
-    if elapsed < _SEARCH_MIN_INTERVAL:
-        time.sleep(_SEARCH_MIN_INTERVAL - elapsed)
-    _search_last_time = time.monotonic()
+    with _search_lock:
+        now = time.monotonic()
+        elapsed = now - _search_last_time
+        if elapsed < _SEARCH_MIN_INTERVAL:
+            time.sleep(_SEARCH_MIN_INTERVAL - elapsed)
+        _search_last_time = time.monotonic()
 
     try:
         from ddgs import DDGS

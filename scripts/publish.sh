@@ -1,11 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Publish chinese-scraper-utils to PyPI
 # Usage: ./publish.sh <version>
 # Requires: PYPI_TOKEN env var or .pypirc configured
 
-set -e
+set -euo pipefail
 
-VERSION=${1:?"Usage: ./publish.sh <version> (e.g., 0.2.0)"}
+VERSION="${1:-}"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+  echo "ERROR: Invalid version format. Expected semver (e.g., 0.2.7 or 0.2.7-beta.1)"
+  exit 1
+fi
 
 # Update version in pyproject.toml
 sed -i "s/version = \".*\"/version = \"$VERSION\"/" pyproject.toml
