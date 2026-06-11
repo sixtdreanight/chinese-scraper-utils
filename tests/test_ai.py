@@ -9,12 +9,12 @@ from openai import APIStatusError
 
 @pytest.fixture
 def client():
-    return DeepSeekClient(api_key="sk-test", model="deepseek-chat", max_retries=2)
+    return DeepSeekClient(api_key="sk-test", model="deepseek-v4-flash", max_retries=2)
 
 
 class TestDeepSeekClientInit:
     def test_default_values(self, client):
-        assert client.model == "deepseek-chat"
+        assert client.model == "deepseek-v4-flash"
         assert client.base_url == "https://api.deepseek.com"
         assert client.max_retries == 2
 

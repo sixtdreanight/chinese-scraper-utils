@@ -19,7 +19,7 @@ from chinese_scraper_utils._extractor import (
 
 @pytest.fixture
 def client():
-    return DeepSeekClient(api_key="sk-test", model="deepseek-chat", max_retries=1)
+    return DeepSeekClient(api_key="sk-test", model="deepseek-v4-flash", max_retries=1)
 
 
 @pytest.fixture

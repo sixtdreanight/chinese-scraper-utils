@@ -51,12 +51,20 @@ class DeepSeekClient:
         self,
         api_key: str,
         base_url: str = "https://api.deepseek.com",
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-flash",
         max_retries: int = 3,
+        thinking: bool = False,
     ):
         self.base_url = base_url
         self.model = model
         self.max_retries = max_retries
+        self.thinking = thinking
+
+        self._extra_body = (
+            {"thinking": {"type": "enabled"}} if thinking else None
+        )
+
+        self._last_usage: dict[str, int] | None = None
 
         # 同步客户端
         self.client = OpenAI(api_key=api_key, base_url=base_url)
@@ -74,6 +82,48 @@ class DeepSeekClient:
                 base_url=self.base_url,
             )
         return self._async_client
+
+    @property
+    def last_usage(self) -> dict[str, int] | None:
+        """最近一次 API 调用的 token 用量统计。"""
+        return self._last_usage
+
+    @property
+    def total_cost(self) -> float:
+        """累计费用（USD），基于 self._total_usage 和模型定价。"""
+        return self._total_cost
+
+    def _record_usage(self, response, model: str | None = None) -> None:
+        """记录单次 API 调用的 token 用量。"""
+        if hasattr(response, "usage") and response.usage:
+            self._last_usage = {
+                "prompt_tokens": response.usage.prompt_tokens or 0,
+                "completion_tokens": response.usage.completion_tokens or 0,
+                "total_tokens": response.usage.total_tokens or 0,
+            }
+            m = model or self.model
+            if "v4-pro" in m:
+                in_price = 0.28
+                out_price = 1.12
+            elif "flash" in m or "chat" in m:
+                in_price = 0.14
+                out_price = 0.28
+            else:
+                in_price = 0.14
+                out_price = 0.28
+            cost = (
+                self._last_usage["prompt_tokens"] / 1_000_000 * in_price
+                + self._last_usage["completion_tokens"] / 1_000_000 * out_price
+            )
+            self._total_cost = getattr(self, "_total_cost", 0) + cost
+            logger.info(
+                "chat: %d prompt + %d completion = %d tokens, $%.4f (cumulative $%.4f)",
+                self._last_usage["prompt_tokens"],
+                self._last_usage["completion_tokens"],
+                self._last_usage["total_tokens"],
+                cost,
+                self._total_cost,
+            )
 
     # ═══════════════════════════════════════════════════════
     # 同步 API
@@ -94,7 +144,9 @@ class DeepSeekClient:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    extra_body=self._extra_body,
                 )
+                self._record_usage(response)
                 return (response.choices[0].message.content or "").strip()
             except (APITimeoutError, APIConnectionError) as e:
                 last_exc = e
@@ -132,7 +184,9 @@ class DeepSeekClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     response_format={"type": "json_object"},
+                    extra_body=self._extra_body,
                 )
+                self._record_usage(response)
                 raw = (response.choices[0].message.content or "").strip()
 
                 try:
@@ -148,7 +202,9 @@ class DeepSeekClient:
                             messages=msgs,
                             temperature=temperature,
                             max_tokens=max_tokens,
+                            extra_body=self._extra_body,
                         )
+                        self._record_usage(fallback)
                         raw = (fallback.choices[0].message.content or "").strip()
                         try:
                             return _parse_json_content(raw)
@@ -198,7 +254,9 @@ class DeepSeekClient:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    extra_body=self._extra_body,
                 )
+                self._record_usage(response)
                 return (response.choices[0].message.content or "").strip()
             except (APITimeoutError, APIConnectionError) as e:
                 last_exc = e
@@ -238,7 +296,9 @@ class DeepSeekClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     response_format={"type": "json_object"},
+                    extra_body=self._extra_body,
                 )
+                self._record_usage(response)
                 raw = (response.choices[0].message.content or "").strip()
 
                 try:
@@ -253,7 +313,9 @@ class DeepSeekClient:
                             messages=msgs,
                             temperature=temperature,
                             max_tokens=max_tokens,
+                            extra_body=self._extra_body,
                         )
+                        self._record_usage(fallback)
                         raw = (fallback.choices[0].message.content or "").strip()
                         try:
                             return _parse_json_content(raw)
