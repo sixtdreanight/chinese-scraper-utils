@@ -96,3 +96,48 @@ class TestScrapeHackernewsTop:
         assert results[0].title == "Show HN: Cool Project"
         assert results[0].source == "Hacker News"
         assert results[0].raw_score == 100
+
+    def test_hn_http_error_returns_empty(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.return_value = mock_resp
+
+        with patch("chinese_scraper_utils._hotspots.httpx.Client", return_value=mock_client):
+            results = scrape_hackernews_top()
+            assert results == []
+
+    def test_hn_fetch_one_exception_returns_none(self):
+        """When an individual story fetch raises an exception, it should be skipped."""
+        mock_ids_resp = MagicMock()
+        mock_ids_resp.status_code = 200
+        mock_ids_resp.json.return_value = [42]
+
+        mock_story = MagicMock()
+        mock_story.status_code = 200
+        mock_story.json.side_effect = Exception("connection error")
+
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value = mock_client
+        mock_client.get.side_effect = [mock_ids_resp, mock_story]
+
+        with patch("chinese_scraper_utils._hotspots.httpx.Client", return_value=mock_client):
+            results = scrape_hackernews_top()
+            assert results == []
+
+
+class TestScraperRegistry:
+    def test_register_and_list(self):
+        from chinese_scraper_utils import register_scraper, list_scrapers
+        @register_scraper("_test_source")
+        def _test_scraper():
+            return []
+        assert "_test_source" in list_scrapers()
+
+    def test_scrape_all(self):
+        from chinese_scraper_utils import scrape_all
+        results = scrape_all()
+        assert "weibo" in results
+        assert "zhihu" in results
+        assert "hackernews" in results

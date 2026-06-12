@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.3.0 (2026-06-12)
+
+### New Features
+- **Circuit Breaker**: `CircuitBreaker` prevents cascading API failures after 5 consecutive errors with 60s recovery timeout (`_ai.py`)
+- **Scraper Registry**: `@register_scraper`, `list_scrapers()`, `scrape_all()` — add hot scrapers without editing core (`_hotspots.py`)
+- **LLM Provider Protocol**: `LLMClient` Protocol allows any provider (not just DeepSeek) in `EventExtractor` (`_extractor.py`)
+- **Progress Callback**: `EventExtractor(..., progress_callback=fn)` reports pipeline stage progress (`_extractor.py`)
+- **Configurable Cross-Year**: `_CROSS_YEAR_THRESHOLD_DAYS` constant replaces hardcoded 90-day threshold (`_date.py`)
+
+### Improvements
+- **Retry deduplication**: `_sync_retry()`/`_async_retry()` helpers eliminate ~50 lines of duplicated retry logic in `_ai.py`
+- **Multi-char suffix blocking**: "大酒店"/"大饭店" etc. now blocked after city names (`_city.py`)
+- **Rate limit wrapping**: `fetch_with_retry` now raises `RateLimitError` after exhausting retries on 429 responses (`_rate_limit.py`)
+
+### Bug Fixes
+- `DeepSeekClient.total_cost` no longer raises `AttributeError` when accessed before any API call
+- HN scraper: `ThreadPoolExecutor` import moved out of try/except to prevent silent import failures
+- `text_map` comprehension swapped variables fixed (index/text unpacking bug)
+
+### Tooling
+- Ruff linter enforced with auto-fix (E501 exempted for UA strings)
+- Mypy type checking passes on all 13 source files
+- Bandit security scanning in CI (4 expected LOW findings: jitter randomness)
+- Coverage threshold: 80% minimum enforced
+
+### Tests
+- **69 new tests** (112 → 181) covering: CLI commands, async methods, circuit breaker, cache, error types, scraper registry, edge cases
+- Coverage: **61% → 88.45%**
+
+---
+
 ## v0.2.0 (2026-05-23)
 
 ### Breaking Changes

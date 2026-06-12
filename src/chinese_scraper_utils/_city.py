@@ -1,6 +1,5 @@
 """中国城市提取与规范化。"""
 
-import re
 
 # 50 个主要城市（从 ComiRadar 合并）
 CITIES = [
@@ -33,6 +32,11 @@ def _is_false_suffix(text: str, after: int) -> bool:
     for suffix in _FALSE_SUFFIX_WORDS:
         if text.startswith(suffix, after):
             return True
+    # 也检查偏移一个字符的情况（如 "西安大酒店" → 城市为 "西安"，后接 "大" + "酒店"）
+    if after < len(text):
+        for suffix in _FALSE_SUFFIX_WORDS:
+            if text.startswith(suffix, after + 1):
+                return True
     return False
 
 

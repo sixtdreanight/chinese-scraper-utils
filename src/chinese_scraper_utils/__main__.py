@@ -64,8 +64,9 @@ def _cmd_scrape_hn(args):
 
 
 def _cmd_extract(args):
-    from chinese_scraper_utils import EventExtractor, DeepSeekClient
     import os
+
+    from chinese_scraper_utils import DeepSeekClient, EventExtractor
 
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:

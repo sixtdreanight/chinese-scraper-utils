@@ -81,3 +81,21 @@ class TestExtractDate:
 
     def test_no_date(self):
         assert extract_date("今天天气不错") == ""
+
+    def test_cross_year_threshold(self):
+        """When month-day is > 90 days in the past, it should advance to next year."""
+        # Use a date far in the past to trigger cross-year
+        result = extract_date("1月1日有活动")
+        # Should be next year's January 1st if today is past October
+        year = datetime.now().year
+        from datetime import date as Date
+        jan1 = Date(year, 1, 1)
+        if (Date.today() - jan1).days > 90:
+            assert result == f"{year + 1}-01-01"
+        else:
+            assert result == f"{year}-01-01"
+
+    def test_full_date_no_cross_year(self):
+        """Explicit year should prevent cross-year advancement."""
+        result = extract_date("2025年1月1日有活动")
+        assert result == "2025-01-01"

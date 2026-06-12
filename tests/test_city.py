@@ -53,6 +53,20 @@ class TestExtractCity:
     def test_empty_text(self):
         assert extract_city("") == ""
 
+    # ── False suffix words ──
+
+    def test_false_positive_university(self):
+        """'北京大学' should NOT match '北京'."""
+        assert extract_city("北京大学有活动") == ""
+
+    def test_false_positive_hotel(self):
+        """'西安大酒店' should NOT match '西安'."""
+        assert extract_city("西安大酒店有活动") == ""
+
+    def test_false_positive_airport(self):
+        """'厦门机场' should NOT match '厦门'."""
+        assert extract_city("厦门机场附近") == ""
+
     # ── Extra cities ──
 
     def test_extra_cities(self):

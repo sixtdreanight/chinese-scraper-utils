@@ -4,19 +4,37 @@
 每个阶段独立可测试。EventExtractor 类封装了完整的管道配置。
 """
 
+from __future__ import annotations
+
 import dataclasses
 import hashlib
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from chinese_scraper_utils._ai import DeepSeekClient
+from chinese_scraper_utils._category import guess_category
 from chinese_scraper_utils._city import CITIES
 from chinese_scraper_utils._date import parse_date
-from chinese_scraper_utils._category import guess_category
+
+if TYPE_CHECKING:
+    from chinese_scraper_utils._ai import DeepSeekClient
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class LLMClient(Protocol):
+    """LLM 客户端协议 — EventExtractor 可接受任何满足此协议的 provider。
+
+    DeepSeekClient 已满足此协议，无需额外适配。
+    """
+    model: str
+    def chat(self, messages: list[dict], *, temperature: float = ..., max_tokens: int = ...) -> str: ...
+    def chat_json(self, messages: list[dict], *, temperature: float = ..., max_tokens: int = ...) -> dict | list: ...
+
 
 # ═══════════════════════════════════════════════════════════════
 # 数据模型
@@ -128,7 +146,7 @@ def _prefilter(
     # 去重（相似文本）
     seen: set[str] = set()
     uniq: list[tuple[int, str]] = []
-    for s, i, t in sorted(scored, key=lambda x: x[0], reverse=True):
+    for _s, i, t in sorted(scored, key=lambda x: x[0], reverse=True):
         key = t[:120]
         if key not in seen:
             seen.add(key)
@@ -195,7 +213,7 @@ def _build_extract_prompt(
 
 
 def _extract_raw(
-    client: DeepSeekClient,
+    client: LLMClient,
     texts: list[tuple[int, str]],
     event_types: list[str],
     temperature: float = 0.1,
@@ -271,11 +289,16 @@ def _validate_and_score(
 
         # ── 规则化置信度 ──
         score = 0.0
-        if valid_date:       score += 0.30
-        if valid_city:       score += 0.25
-        if valid_venue:      score += 0.15
-        if valid_category:   score += 0.15
-        if valid_title:      score += 0.15
+        if valid_date:
+            score += 0.30
+        if valid_city:
+            score += 0.25
+        if valid_venue:
+            score += 0.15
+        if valid_category:
+            score += 0.15
+        if valid_title:
+            score += 0.15
 
         events.append(ExtractedEvent(
             title=title,
@@ -299,8 +322,8 @@ def _check_date(d: str) -> bool:
     parsed = parse_date(d)
     if not parsed:
         return False
-    from datetime import date as Date
-    today = Date.today().isoformat()
+    from datetime import date
+    today = date.today().isoformat()
     return parsed >= today
 
 
@@ -337,8 +360,7 @@ def _is_same_event(a: ExtractedEvent, b: ExtractedEvent) -> bool:
     tb = _normalize_title(b.title)
     if ta == tb:
         return True
-    if len(ta) >= 4 and len(tb) >= 4:
-        if ta[:4] == tb[:4] or ta in tb or tb in ta:
+    if len(ta) >= 4 and len(tb) >= 4 and (ta[:4] == tb[:4] or ta in tb or tb in ta):
             return True
     # ±3 day window instead of same-month
     if a.date and b.date:
@@ -494,13 +516,14 @@ class EventExtractor:
 
     def __init__(
         self,
-        client: DeepSeekClient,
+        client: LLMClient,
         event_types: list[str],
         min_confidence: float = 0.5,
         temperature: float = 0.1,
         extra_cities: list[str] | None = None,
         cache_path: str | None = None,
         cache_ttl_days: int = 7,
+        progress_callback: Callable[[str, int, int], None] | None = None,
     ):
         self._client = client
         self._event_types = event_types
@@ -508,6 +531,7 @@ class EventExtractor:
         self._temperature = temperature
         self._extra_cities = extra_cities
         self._cache = _ExtractionCache(cache_path, cache_ttl_days)
+        self._progress_callback = progress_callback
 
     def dry_run(
         self,
@@ -542,8 +566,13 @@ class EventExtractor:
         Returns:
             通过五阶段管道的 ExtractedEvent 列表。
         """
+        cb = self._progress_callback
+
         if not texts:
             return []
+
+        if cb:
+            cb("Prefiltering texts...", 1, 5)
 
         # Stage 1: Prefilter
         scored = _prefilter(texts, min_score=min_score)
@@ -551,16 +580,21 @@ class EventExtractor:
             return []
 
         # 构建索引到原文的映射
-        text_map: dict[int, str] = {i: texts[i] for _, i in scored if i < len(texts)}
+        text_map: dict[int, str] = {idx: texts[idx] for idx, _ in scored if idx < len(texts)}
 
         # 检查缓存
         cache_key = _cache_key(scored, self._event_types, self._client.model)
         cached = self._cache.get(cache_key)
         if cached is not None:
+            if cb:
+                cb("Cache hit — validating...", 4, 5)
             events = _validate_and_score(
                 cached, self._event_types, self._extra_cities, text_map
             )
             return [e for e in events if e.confidence >= self._min_confidence]
+
+        if cb:
+            cb("Calling LLM API for extraction...", 2, 5)
 
         # Stage 2 & 3: LLM Extract
         event_types_for_llm = (
@@ -570,8 +604,14 @@ class EventExtractor:
             self._client, scored, event_types_for_llm, self._temperature
         )
 
+        if cb:
+            cb("Caching results...", 3, 5)
+
         # Cache raw LLM response
         self._cache.set(cache_key, raw)
+
+        if cb:
+            cb("Validating and scoring...", 4, 5)
 
         # Stage 4: Validate & Score
         events = _validate_and_score(
@@ -580,6 +620,9 @@ class EventExtractor:
 
         # Confidence threshold
         events = [e for e in events if e.confidence >= self._min_confidence]
+
+        if cb:
+            cb("Deduplicating events...", 5, 5)
 
         # Stage 5: Dedup
         events = _dedup(events)

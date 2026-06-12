@@ -45,6 +45,20 @@ class TestSearchWeb:
             assert results == []
 
 
+class TestSearchRateLimit:
+    def test_search_rate_limit_enforced(self):
+        """Second call within 3s should be delayed by the rate limiter."""
+        import time
+        from chinese_scraper_utils._search import search_web
+        with patch.dict("sys.modules", {"ddgs": MagicMock()}):
+            t0 = time.monotonic()
+            search_web("test query")
+            t1 = time.monotonic()
+            search_web("test query")
+            t2 = time.monotonic()
+            assert t2 - t1 >= 2.5 or t2 - t0 >= 2.5
+
+
 class TestSearchResult:
     def test_dataclass_fields(self):
         sr = SearchResult(title="T", url="https://x.com", snippet="S")

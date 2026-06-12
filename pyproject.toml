@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chinese-scraper-utils"
-version = "0.2.8"
+version = "0.3.0"
 description = "Chinese scraping utilities — date parsing, city extraction, SHA256 ID, UA pool, rate limiter, DeepSeek client, web search, hot topic scrapers, LLM extraction pipeline"
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,13 @@ dependencies = [
 [project.optional-dependencies]
 search = ["ddgs>=1.0"]
 async = ["httpx>=0.25"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.3",
+    "mypy>=1.8",
+    "bandit>=1.7",
+]
 
 [project.urls]
 Homepage = "https://github.com/sixtdreanight/chinese-scraper-utils"
@@ -40,3 +47,52 @@ Issues = "https://github.com/sixtdreanight/chinese-scraper-utils/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "N", "SIM", "B", "C4", "RUF100"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/chinese_scraper_utils/_ua.py" = ["E501"]
+"tests/*" = ["T20"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+show_error_codes = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+exclude = ["tests/"]
+
+[[tool.mypy.overrides]]
+module = "chinese_scraper_utils._ai"
+disable_error_code = ["arg-type", "call-overload"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires real external API access (e.g. DeepSeek, Weibo)",
+]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

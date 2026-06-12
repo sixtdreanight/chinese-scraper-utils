@@ -1,12 +1,12 @@
 """异步速率限制器 — 请求间最小间隔 + 指数退避重试。"""
 
-import time
 import asyncio
 import random
+import time
 
 import httpx
 
-from chinese_scraper_utils.errors import RateLimitError, NetworkError
+from chinese_scraper_utils.errors import NetworkError, RateLimitError
 
 # 可重试的 HTTP 状态码（与 _ai.py 中的 DeepSeekClient 保持一致）
 _RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
@@ -40,9 +40,13 @@ class RateLimiter:
                 await self.wait()
                 resp = await fetch_fn()
                 if hasattr(resp, "status_code") and resp.status_code in _RETRYABLE_STATUSES:
-                    wait_s = (2 ** attempt) * (0.5 + random.random())
-                    await asyncio.sleep(wait_s)
-                    continue
+                    if attempt < max_retries - 1:
+                        wait_s = (2 ** attempt) * (0.5 + random.random())
+                        await asyncio.sleep(wait_s)
+                        continue
+                    raise RateLimitError(
+                        f"HTTP {resp.status_code} after {max_retries} retries"
+                    )
                 return resp
             except Exception as e:
                 last_exc = e

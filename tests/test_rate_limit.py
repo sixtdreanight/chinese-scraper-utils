@@ -114,3 +114,39 @@ class TestRateLimitDecorator:
             pass
 
         assert my_func.__name__ == "my_func"
+
+
+class TestFetchWithRetryErrors:
+    def test_raises_rate_limit_error_on_429(self):
+        from chinese_scraper_utils.errors import RateLimitError
+        from unittest.mock import patch
+        limiter = RateLimiter(min_interval=0.01)
+
+        async def fetch():
+            class FakeResponse:
+                status_code = 429
+            return FakeResponse()
+
+        with patch("chinese_scraper_utils._rate_limit.asyncio.sleep", return_value=None):
+            try:
+                asyncio.run(limiter.fetch_with_retry(fetch, max_retries=2))
+            except RateLimitError:
+                return
+            # Should have raised RateLimitError
+            assert False, "Expected RateLimitError"
+
+    def test_raises_network_error_on_http_error(self):
+        from chinese_scraper_utils.errors import NetworkError
+        import httpx
+        from unittest.mock import patch
+        limiter = RateLimiter(min_interval=0.01)
+
+        async def fetch():
+            raise httpx.ConnectError("connection refused")
+
+        with patch("chinese_scraper_utils._rate_limit.asyncio.sleep", return_value=None):
+            try:
+                asyncio.run(limiter.fetch_with_retry(fetch, max_retries=2))
+            except NetworkError:
+                return
+            assert False, "Expected NetworkError"

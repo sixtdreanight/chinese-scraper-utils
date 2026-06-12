@@ -1,18 +1,22 @@
-"""DeepSeek API 客户端 — 基于 OpenAI SDK，带 JSON mode + 回退 + 重试。
+"""DeepSeek API 客户端 — 基于 OpenAI SDK，带 JSON mode + 回退 + 重试 + 熔断。
 
 支持同步和异步两种调用方式。
 """
 
 from __future__ import annotations
 
+import enum
 import json
 import logging
 import random
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
-from openai import APIStatusError, APITimeoutError, APIConnectionError, OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+
+from chinese_scraper_utils.errors import CircuitBreakerOpen
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,42 @@ def _parse_json_content(raw: str) -> dict | list:
 def _retry_sleep(attempt: int) -> float:
     """指数退避 + jitter 的等待时间。"""
     return (2 ** attempt) * (0.5 + random.random())
+
+
+class CircuitBreakerState(enum.Enum):
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+class CircuitBreaker:
+    """熔断器：连续失败过多时阻止 API 调用，防止雪崩。
+
+    CLOSED → (连续 N 次失败) → OPEN → (等待 T 秒) → HALF_OPEN → (成功) → CLOSED
+    """
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self._failure_count = 0
+        self._state = CircuitBreakerState.CLOSED
+        self._last_failure_time = 0.0
+
+    @property
+    def state(self) -> str:
+        if self._state == CircuitBreakerState.OPEN and time.monotonic() - self._last_failure_time > self.recovery_timeout:
+                self._state = CircuitBreakerState.HALF_OPEN
+        return self._state.value
+
+    def record_success(self) -> None:
+        self._failure_count = 0
+        self._state = CircuitBreakerState.CLOSED
+
+    def record_failure(self) -> None:
+        self._failure_count += 1
+        self._last_failure_time = time.monotonic()
+        if self._failure_count >= self.failure_threshold:
+            self._state = CircuitBreakerState.OPEN
 
 
 class DeepSeekClient:
@@ -65,6 +105,8 @@ class DeepSeekClient:
         )
 
         self._last_usage: dict[str, int] | None = None
+        self._total_cost: float = 0.0
+        self._circuit_breaker = CircuitBreaker()
 
         # 同步客户端
         self.client = OpenAI(api_key=api_key, base_url=base_url)
@@ -90,7 +132,7 @@ class DeepSeekClient:
 
     @property
     def total_cost(self) -> float:
-        """累计费用（USD），基于 self._total_usage 和模型定价。"""
+        """累计费用（USD），基于 token 用量和模型定价。"""
         return self._total_cost
 
     def _record_usage(self, response, model: str | None = None) -> None:
@@ -115,7 +157,7 @@ class DeepSeekClient:
                 self._last_usage["prompt_tokens"] / 1_000_000 * in_price
                 + self._last_usage["completion_tokens"] / 1_000_000 * out_price
             )
-            self._total_cost = getattr(self, "_total_cost", 0) + cost
+            self._total_cost += cost
             logger.info(
                 "chat: %d prompt + %d completion = %d tokens, $%.4f (cumulative $%.4f)",
                 self._last_usage["prompt_tokens"],
@@ -124,6 +166,76 @@ class DeepSeekClient:
                 cost,
                 self._total_cost,
             )
+
+    # ═══════════════════════════════════════════════════════
+    # Retry helpers — sync / async
+    # ═══════════════════════════════════════════════════════
+
+    def _sync_retry(self, create_fn: Callable[[], Any]) -> Any:
+        """同步重试骨架：熔断检查 → API 调用 → 网络/HTTP 重试 → 用量记录。
+
+        create_fn: 无参可调用对象，返回 OpenAI API 响应。
+        """
+        if self._circuit_breaker.state == "open":
+            raise CircuitBreakerOpen()
+
+        last_exc = None
+        for attempt in range(self.max_retries):
+            try:
+                response = create_fn()
+                self._record_usage(response)
+                self._circuit_breaker.record_success()
+                return response
+            except (APITimeoutError, APIConnectionError) as e:
+                last_exc = e
+                self._circuit_breaker.record_failure()
+                if attempt < self.max_retries - 1:
+                    logger.debug("Network error (attempt %d): %s", attempt + 1, e)
+                    time.sleep(_retry_sleep(attempt))
+            except APIStatusError as e:
+                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
+                    logger.debug("HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
+                    self._circuit_breaker.record_failure()
+                    time.sleep(_retry_sleep(attempt))
+                else:
+                    if e.status_code not in _RETRYABLE_STATUSES:
+                        self._circuit_breaker.record_failure()
+                    raise
+        raise last_exc or RuntimeError("max retries exceeded")
+
+    async def _async_retry(self, create_fn: Callable[[], Any]) -> Any:
+        """异步重试骨架：熔断检查 → API 调用 → 网络/HTTP 重试 → 用量记录。
+
+        create_fn: 无参异步可调用对象，返回 OpenAI API 响应。
+        """
+        import asyncio
+
+        if self._circuit_breaker.state == "open":
+            raise CircuitBreakerOpen()
+
+        last_exc = None
+        for attempt in range(self.max_retries):
+            try:
+                response = await create_fn()
+                self._record_usage(response)
+                self._circuit_breaker.record_success()
+                return response
+            except (APITimeoutError, APIConnectionError) as e:
+                last_exc = e
+                self._circuit_breaker.record_failure()
+                if attempt < self.max_retries - 1:
+                    logger.debug("Async network error (attempt %d): %s", attempt + 1, e)
+                    await asyncio.sleep(_retry_sleep(attempt))
+            except APIStatusError as e:
+                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
+                    logger.debug("Async HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
+                    self._circuit_breaker.record_failure()
+                    await asyncio.sleep(_retry_sleep(attempt))
+                else:
+                    if e.status_code not in _RETRYABLE_STATUSES:
+                        self._circuit_breaker.record_failure()
+                    raise
+        raise last_exc or RuntimeError("max retries exceeded")
 
     # ═══════════════════════════════════════════════════════
     # 同步 API
@@ -135,31 +247,17 @@ class DeepSeekClient:
         temperature: float = 0.3,
         max_tokens: int = 8192,
     ) -> str:
-        """发送聊天请求，返回纯文本回复。内置 429/503 重试。"""
-        last_exc = None
-        for attempt in range(self.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    extra_body=self._extra_body,
-                )
-                self._record_usage(response)
-                return (response.choices[0].message.content or "").strip()
-            except (APITimeoutError, APIConnectionError) as e:
-                last_exc = e
-                if attempt < self.max_retries - 1:
-                    logger.debug("Network error (attempt %d): %s", attempt + 1, e)
-                    time.sleep(_retry_sleep(attempt))
-            except APIStatusError as e:
-                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
-                    logger.debug("HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
-                    time.sleep(_retry_sleep(attempt))
-                else:
-                    raise
-        raise last_exc or RuntimeError("max retries exceeded")
+        """发送聊天请求，返回纯文本回复。内置重试 + 熔断。"""
+        response = self._sync_retry(
+            lambda: self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                extra_body=self._extra_body,
+            )
+        )
+        return (response.choices[0].message.content or "").strip()
 
     def chat_json(
         self,
@@ -167,7 +265,7 @@ class DeepSeekClient:
         temperature: float = 0.3,
         max_tokens: int = 8192,
     ) -> dict | list:
-        """发送聊天请求，要求 JSON 输出。解析失败时自动回退重试。内置 429/503 重试。"""
+        """发送聊天请求，要求 JSON 输出。解析失败时自动回退重试。内置重试 + 熔断。"""
         msgs = [dict(m) for m in messages]
         json_hint = "\n请以JSON格式输出。"
         if msgs and msgs[0]["role"] == "system":
@@ -175,10 +273,9 @@ class DeepSeekClient:
         else:
             msgs.insert(0, {"role": "system", "content": json_hint.strip()})
 
-        last_exc = None
         for attempt in range(self.max_retries):
-            try:
-                response = self.client.chat.completions.create(
+            response = self._sync_retry(
+                lambda: self.client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
                     temperature=temperature,
@@ -186,52 +283,37 @@ class DeepSeekClient:
                     response_format={"type": "json_object"},
                     extra_body=self._extra_body,
                 )
-                self._record_usage(response)
-                raw = (response.choices[0].message.content or "").strip()
+            )
+            raw = (response.choices[0].message.content or "").strip()
 
-                try:
-                    return _parse_json_content(raw)
-                except json.JSONDecodeError:
-                    if attempt == self.max_retries - 1:
-                        # Last attempt: fallback without JSON mode
-                        logger.debug(
-                            "JSON parse failed at last attempt, retrying without JSON mode"
-                        )
-                        fallback = self.client.chat.completions.create(
+            try:
+                return _parse_json_content(raw)
+            except json.JSONDecodeError:
+                if attempt == self.max_retries - 1:
+                    logger.debug(
+                        "JSON parse failed at last attempt, retrying without JSON mode"
+                    )
+                    fallback = self._sync_retry(
+                        lambda: self.client.chat.completions.create(
                             model=self.model,
                             messages=msgs,
                             temperature=temperature,
                             max_tokens=max_tokens,
                             extra_body=self._extra_body,
                         )
-                        self._record_usage(fallback)
-                        raw = (fallback.choices[0].message.content or "").strip()
-                        try:
-                            return _parse_json_content(raw)
-                        except json.JSONDecodeError as e:
-                            raise ValueError(
-                                f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
-                            ) from e
-                    # Not last attempt: let retry loop handle it
-                    logger.debug(
-                        "JSON parse failed (attempt %d), will retry with JSON mode",
-                        attempt + 1,
                     )
-                    continue
-
-            except (APITimeoutError, APIConnectionError) as e:
-                last_exc = e
-                if attempt < self.max_retries - 1:
-                    logger.debug("Network error (attempt %d): %s", attempt + 1, e)
-                    time.sleep(_retry_sleep(attempt))
-            except APIStatusError as e:
-                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
-                    logger.debug("HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
-                    time.sleep(_retry_sleep(attempt))
-                else:
-                    raise
-
-        raise last_exc or RuntimeError("max retries exceeded")
+                    raw = (fallback.choices[0].message.content or "").strip()
+                    try:
+                        return _parse_json_content(raw)
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
+                        ) from e
+                logger.debug(
+                    "JSON parse failed (attempt %d), will retry with JSON mode",
+                    attempt + 1,
+                )
+        raise RuntimeError("max retries exceeded")
 
     # ═══════════════════════════════════════════════════════
     # 异步 API
@@ -244,32 +326,16 @@ class DeepSeekClient:
         max_tokens: int = 8192,
     ) -> str:
         """异步版 chat()。"""
-        import asyncio
-
-        last_exc = None
-        for attempt in range(self.max_retries):
-            try:
-                response = await self.async_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    extra_body=self._extra_body,
-                )
-                self._record_usage(response)
-                return (response.choices[0].message.content or "").strip()
-            except (APITimeoutError, APIConnectionError) as e:
-                last_exc = e
-                if attempt < self.max_retries - 1:
-                    logger.debug("Async network error (attempt %d): %s", attempt + 1, e)
-                    await asyncio.sleep(_retry_sleep(attempt))
-            except APIStatusError as e:
-                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
-                    logger.debug("Async HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
-                    await asyncio.sleep(_retry_sleep(attempt))
-                else:
-                    raise
-        raise last_exc or RuntimeError("max retries exceeded")
+        response = await self._async_retry(
+            lambda: self.async_client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                extra_body=self._extra_body,
+            )
+        )
+        return (response.choices[0].message.content or "").strip()
 
     async def achat_json(
         self,
@@ -278,7 +344,6 @@ class DeepSeekClient:
         max_tokens: int = 8192,
     ) -> dict | list:
         """异步版 chat_json()。"""
-        import asyncio
 
         msgs = [dict(m) for m in messages]
         json_hint = "\n请以JSON格式输出。"
@@ -287,10 +352,9 @@ class DeepSeekClient:
         else:
             msgs.insert(0, {"role": "system", "content": json_hint.strip()})
 
-        last_exc = None
         for attempt in range(self.max_retries):
-            try:
-                response = await self.async_client.chat.completions.create(
+            response = await self._async_retry(
+                lambda: self.async_client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
                     temperature=temperature,
@@ -298,47 +362,34 @@ class DeepSeekClient:
                     response_format={"type": "json_object"},
                     extra_body=self._extra_body,
                 )
-                self._record_usage(response)
-                raw = (response.choices[0].message.content or "").strip()
+            )
+            raw = (response.choices[0].message.content or "").strip()
 
-                try:
-                    return _parse_json_content(raw)
-                except json.JSONDecodeError:
-                    if attempt == self.max_retries - 1:
-                        logger.debug(
-                            "Async JSON parse failed at last attempt, retrying without JSON mode"
-                        )
-                        fallback = await self.async_client.chat.completions.create(
+            try:
+                return _parse_json_content(raw)
+            except json.JSONDecodeError:
+                if attempt == self.max_retries - 1:
+                    logger.debug(
+                        "Async JSON parse failed at last attempt, retrying without JSON mode"
+                    )
+                    fallback = await self._async_retry(
+                        lambda: self.async_client.chat.completions.create(
                             model=self.model,
                             messages=msgs,
                             temperature=temperature,
                             max_tokens=max_tokens,
                             extra_body=self._extra_body,
                         )
-                        self._record_usage(fallback)
-                        raw = (fallback.choices[0].message.content or "").strip()
-                        try:
-                            return _parse_json_content(raw)
-                        except json.JSONDecodeError as e:
-                            raise ValueError(
-                                f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
-                            ) from e
-                    logger.debug(
-                        "Async JSON parse failed (attempt %d), will retry with JSON mode",
-                        attempt + 1,
                     )
-                    continue
-
-            except (APITimeoutError, APIConnectionError) as e:
-                last_exc = e
-                if attempt < self.max_retries - 1:
-                    logger.debug("Async network error (attempt %d): %s", attempt + 1, e)
-                    await asyncio.sleep(_retry_sleep(attempt))
-            except APIStatusError as e:
-                if e.status_code in _RETRYABLE_STATUSES and attempt < self.max_retries - 1:
-                    logger.debug("Async HTTP %s (attempt %d), retrying...", e.status_code, attempt + 1)
-                    await asyncio.sleep(_retry_sleep(attempt))
-                else:
-                    raise
-
-        raise last_exc or RuntimeError("max retries exceeded")
+                    raw = (fallback.choices[0].message.content or "").strip()
+                    try:
+                        return _parse_json_content(raw)
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"无法解析为 JSON。原始响应前 200 字符: {raw[:200]}"
+                        ) from e
+                logger.debug(
+                    "Async JSON parse failed (attempt %d), will retry with JSON mode",
+                    attempt + 1,
+                )
+        raise RuntimeError("max retries exceeded")

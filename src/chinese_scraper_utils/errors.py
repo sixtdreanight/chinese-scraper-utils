@@ -46,3 +46,10 @@ class NetworkError(ScraperError):
     def __init__(self, message: str = "Network error", url: str = ""):
         super().__init__(message)
         self.url = url
+
+
+class CircuitBreakerOpen(ScraperError):  # noqa: N818
+    """熔断器已打开 — API 调用被阻止，等待恢复超时到期。"""
+    def __init__(self, message: str = "Circuit breaker is open", retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after

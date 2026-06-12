@@ -4,15 +4,49 @@
 所有抓取使用 httpx 同步请求，调用方可自行包装为异步。
 """
 
+from __future__ import annotations
+
 import dataclasses
 import logging
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 
 from chinese_scraper_utils._ua import random_ua
-from chinese_scraper_utils.errors import ScraperError
 
 logger = logging.getLogger(__name__)
+
+# ═══════════════════════════════════════════════════════════════
+# 抓取器注册表
+# ═══════════════════════════════════════════════════════════════
+
+_HOTSPOT_SCRAPERS: dict[str, Callable[[], list[HotTopic]]] = {}
+
+
+def register_scraper(name: str):
+    """装饰器：将热点抓取函数注册到全局注册表。
+
+    Usage:
+        @register_scraper("my_source")
+        def scrape_my_source() -> list[HotTopic]:
+            ...
+    """
+    def decorator(fn: Callable[[], list[HotTopic]]) -> Callable[[], list[HotTopic]]:
+        _HOTSPOT_SCRAPERS[name] = fn
+        return fn
+    return decorator
+
+
+def list_scrapers() -> list[str]:
+    """返回所有已注册的热点抓取器名称。"""
+    return list(_HOTSPOT_SCRAPERS.keys())
+
+
+def scrape_all() -> dict[str, list[HotTopic]]:
+    """运行所有已注册的抓取器，返回 {名称: 结果列表}。"""
+    return {name: fn() for name, fn in _HOTSPOT_SCRAPERS.items()}
+
 
 # ═══════════════════════════════════════════════════════════════
 # 数据模型
@@ -59,6 +93,7 @@ def _weibo_item_to_topic(item: dict) -> HotTopic | None:
     )
 
 
+@register_scraper("weibo")
 def scrape_weibo_hot() -> list[HotTopic]:
     """抓取微博实时热搜榜。
 
@@ -110,6 +145,7 @@ def _zhihu_headers():
     return {**_ZHIHU_STATIC_HEADERS, "User-Agent": random_ua()}
 
 
+@register_scraper("zhihu")
 def scrape_zhihu_hot() -> list[HotTopic]:
     """抓取知乎热榜。
 
@@ -159,6 +195,7 @@ def scrape_zhihu_hot() -> list[HotTopic]:
 # ═══════════════════════════════════════════════════════════════
 
 
+@register_scraper("hackernews")
 def scrape_hackernews_top() -> list[HotTopic]:
     """抓取 Hacker News 首页热门。
 
@@ -176,8 +213,6 @@ def scrape_hackernews_top() -> list[HotTopic]:
                 logger.warning("[hn] HTTP %s", resp.status_code)
                 return []
             ids = resp.json()[:30]
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def fetch_one(hid: int) -> HotTopic | None:
             try:

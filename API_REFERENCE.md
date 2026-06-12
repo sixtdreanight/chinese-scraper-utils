@@ -1,4 +1,4 @@
-# API Reference — chinese-scraper-utils v0.2.0
+# API Reference — chinese-scraper-utils v0.3.0
 
 ## Core Utilities
 
@@ -163,8 +163,9 @@ class DeepSeekClient:
         self,
         api_key: str,
         base_url: str = "https://api.deepseek.com",
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-flash",
         max_retries: int = 3,
+        thinking: bool = False,
     )
 
     # 同步
@@ -174,8 +175,12 @@ class DeepSeekClient:
     # 异步
     async def achat(self, messages, temperature=0.3, max_tokens=8192) -> str
     async def achat_json(self, messages, temperature=0.3, max_tokens=8192) -> dict | list
+
+    # 用量跟踪
+    last_usage: dict[str, int] | None   # 最近一次 token 用量
+    total_cost: float                   # 累计 USD 费用
 ```
-内置 429/503 重试（指数退避 + jitter）。`chat_json` 解析失败时自动回退重试（不加 JSON mode）。
+内置 429/500/502/503/504 重试（指数退避 + jitter）、熔断器保护。`chat_json` 解析失败时自动回退重试（不加 JSON mode）。
 
 ---
 
@@ -201,8 +206,51 @@ ScraperError          # 基类
 ├── RateLimitError    # HTTP 429 / 平台限流
 ├── ExtractionError   # LLM 提取失败
 ├── ValidationError   # 数据校验失败
-└── NetworkError      # 网络超时/DNS/连接错误
+├── NetworkError      # 网络超时/DNS/连接错误
+└── CircuitBreakerOpen  # 熔断器已打开 (v0.3.0)
 ```
+
+---
+
+## Scraper Registry (NEW v0.3.0)
+
+### `register_scraper(name: str)`
+装饰器：将热点抓取函数注册到全局注册表。
+
+### `list_scrapers() -> list[str]`
+返回所有已注册的热点抓取器名称。
+
+### `scrape_all() -> dict[str, list[HotTopic]]`
+运行所有已注册的抓取器，返回 `{名称: 结果列表}`。
+
+```python
+from chinese_scraper_utils import register_scraper, scrape_all
+
+@register_scraper("my_source")
+def scrape_my_source() -> list[HotTopic]:
+    ...
+
+all_results = scrape_all()  # {"weibo": [...], "zhihu": [...], ...}
+```
+
+---
+
+## LLM Client Protocol (NEW v0.3.0)
+
+### `LLMClient`
+Protocol 类，定义 `EventExtractor` 接受的 LLM 客户端接口：
+
+```python
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class LLMClient(Protocol):
+    model: str
+    def chat(self, messages, *, temperature=0.3, max_tokens=8192) -> str: ...
+    def chat_json(self, messages, *, temperature=0.3, max_tokens=8192) -> dict | list: ...
+```
+
+`DeepSeekClient` 已满足此协议。第三方 provider 只需实现 `chat`/`chat_json` 即可接入 `EventExtractor`。
 
 ---
 

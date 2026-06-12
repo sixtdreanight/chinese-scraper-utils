@@ -4,31 +4,36 @@
 速率限制、DeepSeek API 客户端等。
 """
 
-from chinese_scraper_utils._hash import stable_id
-from chinese_scraper_utils._date import parse_date, try_parse_date, extract_date
-from chinese_scraper_utils._city import CITIES, extract_city, normalize_city
-from chinese_scraper_utils._category import CATEGORY_ALIASES, guess_category
-from chinese_scraper_utils._ua import UA_POOL, random_ua
-from chinese_scraper_utils._rate_limit import RateLimiter
 from chinese_scraper_utils._ai import DeepSeekClient
-from chinese_scraper_utils.errors import (
-    ScraperError,
-    RateLimitError,
-    ExtractionError,
-    ValidationError,
-    NetworkError,
+from chinese_scraper_utils._category import CATEGORY_ALIASES, guess_category
+from chinese_scraper_utils._city import CITIES, extract_city, normalize_city
+from chinese_scraper_utils._date import extract_date, parse_date, try_parse_date
+from chinese_scraper_utils._extractor import (
+    EventExtractor,
+    ExtractedEvent,
+    LLMClient,
+    extract_events,
 )
-from chinese_scraper_utils._search import SearchResult, search_web
+from chinese_scraper_utils._hash import stable_id
 from chinese_scraper_utils._hotspots import (
     HotTopic,
+    list_scrapers,
+    register_scraper,
+    scrape_all,
+    scrape_hackernews_top,
     scrape_weibo_hot,
     scrape_zhihu_hot,
-    scrape_hackernews_top,
 )
-from chinese_scraper_utils._extractor import (
-    ExtractedEvent,
-    EventExtractor,
-    extract_events,
+from chinese_scraper_utils._rate_limit import RateLimiter
+from chinese_scraper_utils._search import SearchResult, search_web
+from chinese_scraper_utils._ua import UA_POOL, random_ua
+from chinese_scraper_utils.errors import (
+    CircuitBreakerOpen,
+    ExtractionError,
+    NetworkError,
+    RateLimitError,
+    ScraperError,
+    ValidationError,
 )
 
 __all__ = [
@@ -50,13 +55,18 @@ __all__ = [
     "ExtractionError",
     "ValidationError",
     "NetworkError",
+    "CircuitBreakerOpen",
     "SearchResult",
     "search_web",
     "HotTopic",
     "scrape_weibo_hot",
     "scrape_zhihu_hot",
     "scrape_hackernews_top",
+    "register_scraper",
+    "list_scrapers",
+    "scrape_all",
     "ExtractedEvent",
     "EventExtractor",
     "extract_events",
+    "LLMClient",
 ]

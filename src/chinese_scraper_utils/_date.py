@@ -3,6 +3,8 @@
 import re
 from datetime import datetime
 
+# 跨年推断阈值天数: 月日已过超过此天数 → 推断为次年
+_CROSS_YEAR_THRESHOLD_DAYS = 90
 
 # 自由文本日期正则
 _DATE_PATTERNS = [
@@ -62,12 +64,12 @@ def extract_date(text: str) -> str:
                 y = year
             try:
                 dt = datetime(y, mth, day)
-                # 跨年推断: 月日已过超过 3 个月 → 推断为次年
+                                # 跨年推断: 月日已过超过阈值天数 → 推断为次年
                 if (
                     (len(groups) <= 2 or (len(groups) == 3 and len(str(groups[0])) < 4))
-                    and (now - dt).days > 90
+                    and (now - dt).days > _CROSS_YEAR_THRESHOLD_DAYS
                 ):
-                    try:
+                    try:  # noqa: SIM105
                         dt = datetime(y + 1, mth, day)
                     except ValueError:
                         pass
