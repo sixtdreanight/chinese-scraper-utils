@@ -34,7 +34,7 @@ def _parse_json_content(raw: str) -> dict | list:
 
 def _retry_sleep(attempt: int) -> float:
     """指数退避 + jitter 的等待时间。"""
-    return (2 ** attempt) * (0.5 + random.random())
+    return (2 ** attempt) * (0.5 + random.random()  # nosec B311)
 
 
 class CircuitBreakerState(enum.Enum):

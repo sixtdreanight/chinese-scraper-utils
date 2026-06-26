@@ -39,4 +39,4 @@ UA_POOL = [
 
 def random_ua() -> str:
     """随机返回一个 User-Agent 字符串。"""
-    return random.choice(UA_POOL)
+    return random.choice(UA_POOL)  # nosec B311
