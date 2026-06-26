@@ -41,7 +41,7 @@ class RateLimiter:
                 resp = await fetch_fn()
                 if hasattr(resp, "status_code") and resp.status_code in _RETRYABLE_STATUSES:
                     if attempt < max_retries - 1:
-                        wait_s = (2 ** attempt) * (0.5 + random.random()  # nosec B311)
+                        wait_s = (2 ** attempt) * (0.5 + random.random())  # nosec B311
                         await asyncio.sleep(wait_s)
                         continue
                     raise RateLimitError(
@@ -51,7 +51,7 @@ class RateLimiter:
             except Exception as e:
                 last_exc = e
                 if attempt < max_retries - 1:
-                    wait_s = (2 ** attempt) * (0.5 + random.random()  # nosec B311)
+                    wait_s = (2 ** attempt) * (0.5 + random.random())  # nosec B311
                     await asyncio.sleep(wait_s)
         if last_exc:
             if isinstance(last_exc, httpx.HTTPStatusError):
